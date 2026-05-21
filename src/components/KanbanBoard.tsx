@@ -16,6 +16,18 @@ import { ColumnId, STORAGE, Task, kanbanActions } from '../store/kanbanSlice';
 import { useAppDispatch, useAppSelector } from '../util/reduxHooks';
 import TaskCard from './TaskCard';
 
+type TaskDragData = { type: 'task'; taskId: string; columnId: ColumnId };
+type ColumnDragData = { type: 'column'; columnId: ColumnId };
+type DragData = TaskDragData | ColumnDragData;
+
+const isDragData = (value: unknown): value is DragData => {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  if (v.type === 'task') return typeof v.taskId === 'string' && typeof v.columnId === 'string';
+  if (v.type === 'column') return typeof v.columnId === 'string';
+  return false;
+};
+
 const getColumnIdByTaskId = (columns: { id: ColumnId; taskIds: string[] }[], taskId: string) => {
   for (const column of columns) {
     if (column.taskIds.includes(taskId)) return column.id;
@@ -49,6 +61,12 @@ function KanbanBoard() {
     const passes = (task: Task) => {
       if (filters.priority !== 'All' && task.priority !== filters.priority) return false;
       if (filters.assignee !== 'All' && task.assignee !== filters.assignee) return false;
+      if (filters.query.trim()) {
+        const q = filters.query.trim().toLowerCase();
+        const assignee = task.assignee.toLowerCase();
+        const priority = task.priority.toLowerCase();
+        if (!assignee.includes(q) && !priority.includes(q)) return false;
+      }
       return true;
     };
 
@@ -78,8 +96,8 @@ function KanbanBoard() {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    const data = event.active.data.current as any;
-    if (!data || data.type !== 'task') return;
+    const data = event.active.data.current;
+    if (!isDragData(data) || data.type !== 'task') return;
     const task = tasksById[data.taskId];
     if (!task) return;
     setActiveTask(task);
@@ -90,16 +108,16 @@ function KanbanBoard() {
     const { active, over } = event;
     if (!over) return;
 
-    const activeData = active.data.current as any;
-    const overData = over.data.current as any;
-    if (!activeData || activeData.type !== 'task') return;
+    const activeData = active.data.current;
+    const overData = over.data.current;
+    if (!isDragData(activeData) || activeData.type !== 'task') return;
 
-    const activeTaskId = activeData.taskId as string;
-    const fromColumnId = activeData.columnId as ColumnId;
+    const activeTaskId = activeData.taskId;
+    const fromColumnId = activeData.columnId;
 
-    if (overData?.type === 'task') {
-      const overTaskId = overData.taskId as string;
-      const toColumnId = overData.columnId as ColumnId;
+    if (isDragData(overData) && overData.type === 'task') {
+      const overTaskId = overData.taskId;
+      const toColumnId = overData.columnId;
       if (toColumnId === fromColumnId) {
         dispatch(
           kanbanActions.reorderTaskWithinColumn({
@@ -120,8 +138,8 @@ function KanbanBoard() {
       return;
     }
 
-    if (overData?.type === 'column') {
-      const toColumnId = overData.columnId as ColumnId;
+    if (isDragData(overData) && overData.type === 'column') {
+      const toColumnId = overData.columnId;
       dispatch(
         kanbanActions.moveTask({
           taskId: activeTaskId,

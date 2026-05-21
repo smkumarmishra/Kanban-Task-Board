@@ -23,6 +23,7 @@ export type Column = {
 export type Filters = {
   priority: 'All' | Priority;
   assignee: 'All' | string;
+  query: string;
 };
 
 type BoardSnapshot = {
@@ -47,6 +48,7 @@ const createInitialState = (): BoardState => ({
   filters: {
     priority: 'All',
     assignee: 'All',
+    query: '',
   },
   undo: { snapshot: null },
 });
@@ -68,9 +70,15 @@ const safeParseStoredState = (): BoardSnapshot | null => {
 };
 
 const stored = safeParseStoredState();
+const initial = createInitialState();
 const initialState: BoardState = stored
-  ? { ...createInitialState(), ...stored, undo: { snapshot: null } }
-  : createInitialState();
+  ? {
+      ...initial,
+      ...stored,
+      filters: { ...initial.filters, ...stored.filters },
+      undo: { snapshot: null },
+    }
+  : initial;
 
 const cloneSnapshot = (state: BoardSnapshot): BoardSnapshot => ({
   columns: state.columns.map((c) => ({ ...c, taskIds: [...c.taskIds] })),
@@ -98,6 +106,12 @@ const getColumnIdByTaskId = (columns: Column[], taskId: string): ColumnId | null
 const taskPassesFilters = (task: Task, filters: Filters) => {
   if (filters.priority !== 'All' && task.priority !== filters.priority) return false;
   if (filters.assignee !== 'All' && task.assignee !== filters.assignee) return false;
+  if (filters.query.trim()) {
+    const q = filters.query.trim().toLowerCase();
+    const assignee = task.assignee.toLowerCase();
+    const priority = task.priority.toLowerCase();
+    if (!assignee.includes(q) && !priority.includes(q)) return false;
+  }
   return true;
 };
 
@@ -138,7 +152,7 @@ const kanbanSlice = createSlice({
     },
     clearFilters: (state) => {
       saveUndo(state);
-      state.filters = { priority: 'All', assignee: 'All' };
+      state.filters = { priority: 'All', assignee: 'All', query: '' };
     },
 
     addTask: (
@@ -300,4 +314,3 @@ const kanbanSlice = createSlice({
 export const STORAGE = { key: STORAGE_KEY };
 export const kanbanActions = kanbanSlice.actions;
 export default kanbanSlice;
-
